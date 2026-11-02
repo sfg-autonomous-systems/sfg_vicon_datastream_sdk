@@ -48,7 +48,7 @@ target_include_directories("${target_name}" SYSTEM
   "${sdk_directory}"
   "${stream_directory}"
 )
-target_compile_definitions("${target_name}" PRIVATE ASIO_STANDALONE=1)
+target_compile_definitions("${target_name}" PRIVATE ASIO_STANDALONE=1 ASIO_DISABLE_VISIBILITY)
 target_compile_features("${target_name}" PRIVATE cxx_std_20)
 target_link_libraries("${target_name}" PUBLIC ${CMAKE_THREAD_LIBS_INIT})
 set_target_properties("${target_name}" PROPERTIES
