@@ -80,6 +80,7 @@
 #include <asio/ip/tcp.hpp>
 #include <asio/ip/udp.hpp>
 
+#include <atomic>
 #include <optional>
 #include <thread>
 #include <mutex>
@@ -283,6 +284,8 @@ protected:
   std::shared_ptr<asio::ip::udp::socket> m_pMulticastSocket;
 
   std::shared_ptr<std::thread> m_pClientThread;
+  // Set by Disconnect() to make ClientThread() abandon a pending connect
+  std::atomic<bool> m_bStopRequested;
 
   std::recursive_mutex m_Mutex;
   std::shared_ptr<const VStaticObjects> m_pStaticObjects;

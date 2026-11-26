@@ -328,6 +328,7 @@ void VStaticObjects::BuildMaps()
 
 VViconCGStreamClient::VViconCGStreamClient(std::weak_ptr<IViconCGStreamClientCallback> i_pCallback)
   : m_pCallback(i_pCallback)
+  , m_bStopRequested(false)
   , m_bEnumsChanged(false)
   , m_bStreaming(false)
   , m_bHapticChanged(false)
@@ -434,6 +435,7 @@ bool VViconCGStreamClient::Connect(const std::string& i_rHost, unsigned short i_
     return false;
   }
 
+  m_bStopRequested = false;
   m_pClientThread.reset(new std::thread(std::bind(&VViconCGStreamClient::ClientThread, this)));
 
   return true;
@@ -441,9 +443,10 @@ bool VViconCGStreamClient::Connect(const std::string& i_rHost, unsigned short i_
 
 void VViconCGStreamClient::Disconnect()
 {
+  m_bStopRequested = true;
+
   std::error_code DontCareError;
   m_pSocket->shutdown(asio::ip::tcp::socket::shutdown_both, DontCareError);
-  m_pSocket->close();
   if (m_pMulticastSocket)
   {
     std::error_code DontCareError2;
@@ -456,6 +459,8 @@ void VViconCGStreamClient::Disconnect()
     m_pClientThread->join();
     m_pClientThread.reset();
   }
+
+  m_pSocket->close();
   m_pMulticastSocket.reset();
 
   m_HostName.clear();
@@ -530,6 +535,7 @@ void VViconCGStreamClient::ReceiveMulticastData(std::string i_MulticastIPAddress
 
   m_pMulticastSocket = pMulticastSocket;
 
+  m_bStopRequested = false;
   m_pClientThread.reset(new std::thread(std::bind(&VViconCGStreamClient::ClientThread, this)));
 }
 
@@ -749,13 +755,24 @@ static void Intersect(ViconCGStream::VObjectEnums& i_rServer, ViconCGStream::VOb
 
 void VViconCGStreamClient::ClientThread()
 {
-  std::error_code Error;
+  std::optional<std::error_code> Error;
+  m_pSocket->async_connect(m_EndPoint, [&Error](const std::error_code& i_rError) { Error = i_rError; });
+  m_IOContext.restart();
 
-  m_pSocket->connect(m_EndPoint, Error);
-
-  if (Error)
+  while (!Error && !m_bStopRequested)
   {
-    m_pSocket->close();
+    m_IOContext.run_for(std::chrono::milliseconds(50));
+  }
+
+  if (!Error)
+  {
+    std::error_code DontCareError;
+    m_pSocket->cancel(DontCareError);
+    while (!Error && m_IOContext.run_one() != 0) { }
+  }
+
+  if (!Error || *Error)
+  {
     // OnDisconnect();
     return;
   }
